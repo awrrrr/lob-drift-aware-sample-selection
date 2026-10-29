@@ -1,0 +1,9 @@
+.venv/
+data/raw/
+data/download/
+data/processed/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+runs.db

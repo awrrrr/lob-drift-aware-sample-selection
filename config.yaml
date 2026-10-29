@@ -1,0 +1,25 @@
+# All frozen settings for the project. Change only with a documented reason.
+
+data:
+  raw_dir: data/raw                 # NoAuction + ZScore files only
+  processed_path: data/processed/fi2010.pkl
+  n_features: 144                   # rows 0-143 of each file
+  label_rows: {k1: 144, k2: 145, k3: 146, k5: 147, k10: 148}
+  target: k10                       # one horizon only
+  # Stored labels look backward: label_k10 at row r describes the move starting at r - 9
+  # (step 1 check, 97.7% agreement). Target for row t = stored label_k10 at row t + 9,
+  # same stock-day. The last 9 rows of each stock-day have no target (target = -1).
+  target_shift: 9
+  horizon_snapshots: 10             # target at t uses mid up to t + 10 -> usable after t + 10
+  # Raw label values -> internal class ids (verified in step 1, see check_data.py)
+  label_map: {1: 0, 2: 1, 3: 2}     # 1 = Up, 2 = Stationary, 3 = Down
+  n_stocks_per_day: 5
+  # Each fold file is z-scored with stats of days 1..k. All days are mapped (exact
+  # per-feature affine maps) onto the scale of Train_CF_5 = stats of training days 1-5.
+  scale_ref_fold: 5
+
+splits:
+  train: [1, 2, 3, 4, 5]
+  validation: [6]
+  stream: [7, 8]
+  test: [9, 10]
