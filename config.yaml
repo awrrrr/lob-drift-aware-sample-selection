@@ -23,3 +23,25 @@ splits:
   validation: [6]
   stream: [7, 8]
   test: [9, 10]
+
+# Step 2: V1 classifiers. All use class_weight=balanced. Features already z-scored.
+models:
+  seed: 0
+  # Nine features are constant across all 10 days (step 1); drop them everywhere.
+  drop_features: [f129, f130, f131, f135, f136, f137, f141, f142, f143]
+  # RBF SVM fit cost is quadratic; a full-train fit extrapolates to ~40 min and cannot
+  # be retrained in step 3. So SVM is fit on a fixed seeded stratified subsample, and the
+  # same cap applies when it retrains in step 3 (user decision, step 2).
+  svm_subsample: 20000
+  svm_calibration_cv: 3             # probability calibration folds, training data only
+  svm_calibration_method: sigmoid   # Platt scaling; isotonic needs more data per fold
+  # Small documented grid per model; selection is by validation (day 6) macro-F1.
+  grids:
+    logreg: {C: [0.1, 1.0, 10.0]}
+    knn: {n_neighbors: [25, 50, 100], weights: [uniform, distance]}
+    svm_rbf: {C: [1.0, 10.0], gamma: [scale]}
+  # Chosen V1, frozen for all policy experiments. Logistic regression won the
+  # validation (day 6) macro-F1 (0.455 vs KNN 0.436, calibrated RBF SVM 0.413) and
+  # is the cheapest to retrain. The three C values tied within 0.0002 (noise), so we
+  # freeze C=1.0, the default middle-of-grid value, over the nominal winner C=10.
+  v1: {model: logreg, params: {C: 1.0}}
