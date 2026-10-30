@@ -56,3 +56,12 @@ harness:
   # A sample at stream position p is labellable at p + horizon_snapshots, so it joins
   # the pool of window (p + horizon_snapshots)//W. This carries the last `horizon`
   # samples of each window into the next (leakage rule 1). horizon_snapshots is in data:.
+
+# Step 4: selection policies. Uncertainty = predictive entropy throughout.
+# C and D are deterministic; the seed only affects stochastic policies (B, E).
+policies:
+  density_k: 10            # D: neighbours for the local-density estimate (within pool)
+  audit_share: 0.2         # E: fraction of B reserved for confident-random audit samples
+  confident_quantile: 0.5  # E: pool fraction with the lowest entropy counted as "confident"
+  shortlist_factor: 3      # E: shortlist = factor x (cluster budget) most uncertain
+  pca_components: 10        # E: PCA dimensions before k-means

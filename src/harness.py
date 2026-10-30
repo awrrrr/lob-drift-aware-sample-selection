@@ -108,7 +108,7 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False):
         pool = stream[stream.pool_window == k]
         if len(pool):
             proba = current.predict_proba(pool[feats].values)
-            picks = policy(pool[["sample_id"] + feats], proba, B, rng, selected_ids)
+            picks = policy(pool[["sample_id"] + feats], proba, B, rng, selected_ids, cfg)
         else:
             picks = []
 
