@@ -40,8 +40,19 @@ models:
     logreg: {C: [0.1, 1.0, 10.0]}
     knn: {n_neighbors: [25, 50, 100], weights: [uniform, distance]}
     svm_rbf: {C: [1.0, 10.0], gamma: [scale]}
+  # --- harness block appended below models for readability; see 'harness:' ---
   # Chosen V1, frozen for all policy experiments. Logistic regression won the
   # validation (day 6) macro-F1 (0.455 vs KNN 0.436, calibrated RBF SVM 0.413) and
   # is the cheapest to retrain. The three C values tied within 0.0002 (noise), so we
   # freeze C=1.0, the default middle-of-grid value, over the nominal winner C=10.
   v1: {model: logreg, params: {C: 1.0}}
+
+# Step 3: replay harness over days 7-8.
+harness:
+  window: 1000            # W: snapshots per window (start value, reviewed on validation)
+  budget: 50             # B: samples a policy may add per window
+  gate_tolerance: 0.005  # accept candidate if val macro-F1 >= current - this
+  runs_db: runs.db
+  # A sample at stream position p is labellable at p + horizon_snapshots, so it joins
+  # the pool of window (p + horizon_snapshots)//W. This carries the last `horizon`
+  # samples of each window into the next (leakage rule 1). horizon_snapshots is in data:.
