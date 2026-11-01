@@ -208,3 +208,61 @@ def add_target(df, label_col, shift, label_map):
 def mid_price_proxy(df):
     """Level-1 mid price in z-score units (ask and bid are z-scored separately)."""
     return (df[f"f{ASK1_COL}"] + df[f"f{BID1_COL}"]) / 2.0
+
+
+# ---------------------------------------------------------------------------
+# Volatility condition (leakage rule 4: threshold fitted on training days only)
+#
+# Per-snapshot volatility = rolling std of the level-1 mid-price change over a
+# fixed number of snapshots, within each stock-day (never across a boundary).
+# A "window" is a fixed W-snapshot block of the replay stream (stream_pos // W);
+# a window's volatility is the mean of its snapshots' volatility. A window is
+# high-volatility if that mean exceeds a frozen threshold = a fixed percentile
+# of the training-day window volatilities.
+# ---------------------------------------------------------------------------
+
+def snapshot_volatility(df, vol_window):
+    """Rolling std of mid-price change over `vol_window` snapshots, per stock-day."""
+    mid = mid_price_proxy(df)
+    key = [df["day"], df["stock_id"]]
+    dmid = mid.groupby(key).diff()
+    return dmid.groupby(key).transform(
+        lambda s: s.rolling(vol_window, min_periods=vol_window).std())
+
+
+def stream_windows(df, days, W):
+    """The given days in replay order with a positional window id (stream_pos // W)."""
+    stream = (df[df.day.isin(days)]
+              .sort_values(["day", "stock_id", "t"]).reset_index(drop=True).copy())
+    stream["stream_pos"] = np.arange(len(stream))
+    stream["window"] = stream["stream_pos"] // W
+    return stream
+
+
+def window_volatility(df, days, cfg):
+    """Mean per-snapshot volatility for each positional window of `days`."""
+    W = cfg["harness"]["window"]
+    vol = snapshot_volatility(df, cfg["volatility"]["vol_window"])
+    stream = stream_windows(df, days, W)
+    stream["vol"] = vol.loc[
+        df[df.day.isin(days)].sort_values(["day", "stock_id", "t"]).index].to_numpy()
+    return stream.groupby("window")["vol"].mean()
+
+
+def fit_volatility_threshold(df, cfg):
+    """Frozen threshold: the chosen percentile of training-day window volatilities."""
+    wv = window_volatility(df, cfg["splits"]["train"], cfg)
+    return float(np.nanpercentile(wv.to_numpy(), cfg["volatility"]["percentile"]))
+
+
+def classify_windows(df, days, cfg, threshold):
+    """Map each snapshot of `days` to its window's volatility class.
+
+    Returns a DataFrame with sample_id, window, win_vol, high_vol (bool).
+    """
+    W = cfg["harness"]["window"]
+    stream = stream_windows(df, days, W)
+    wv = window_volatility(df, days, cfg)
+    stream["win_vol"] = stream["window"].map(wv)
+    stream["high_vol"] = stream["win_vol"] > threshold
+    return stream[["sample_id", "window", "win_vol", "high_vol"]]

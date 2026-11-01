@@ -89,6 +89,8 @@ All take the same inputs (current model, window features, already-selected IDs, 
 - 5 seeds per policy. Report mean and spread, and differences in percentage points.
 - If E does not win, report that and examine failure cases. Never adjust the policy after seeing test results.
 
+**Step 5 outcome (recorded 2026-11-01; results in `results/`, numbers in `runs.db`).** Volatility threshold frozen on days 1–5 at 0.000510 (75th percentile; test days are 10.7% high-vol, 8,973 snapshots). On the primary metric (high-vol test macro-F1), **E does not win**: A fixed 0.4126; B/C/D/E/E−audit all ≈ 0.415, within seed noise (E 0.4153 ± 0.0004; per-seed ranges overlap B's). E − E−audit = −0.009 pp, so the audit share does not help here. The only real effect is updating at all (+~0.25 pp over fixed), which random also gets. Failure analysis (`scripts/failure_analysis.py`): policies do pick very different samples (D selects 61% Stationary; cross-policy Jaccard ≤ 0.35), but the B=50/window budget is only 2.6% of the 178k base, sitting on the flat early part of the learning curve where smart vs random is indistinguishable; the model does not saturate (all-stream added → 0.4432 overall). A smaller base or larger budget would be needed for selection to matter — **future work only; not re-run, as changing the setup after seeing test results would break the protocol.**
+
 ## Logging (build this before any policy)
 
 SQLite database `runs.db`:

@@ -65,3 +65,10 @@ policies:
   confident_quantile: 0.5  # E: pool fraction with the lowest entropy counted as "confident"
   shortlist_factor: 3      # E: shortlist = factor x (cluster budget) most uncertain
   pca_components: 10        # E: PCA dimensions before k-means
+
+# Step 5: volatility condition. Threshold is fitted on training days only (rule 4)
+# then frozen; it splits test windows into high/low volatility for evaluation.
+volatility:
+  vol_window: 100     # snapshots for the rolling std of mid-price change
+  percentile: 75      # training-day window-volatility percentile used as threshold
+  threshold: 0.000510  # frozen by scripts/freeze_volatility.py on days 1-5
