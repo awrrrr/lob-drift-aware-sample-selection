@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 runs.db
+.claude/launch.json
+.streamlit/
