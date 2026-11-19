@@ -111,7 +111,7 @@ src/models.py        # classifiers, calibration
 src/policies.py      # A–E and ablation, one function each
 src/harness.py       # replay, retrain, gate, logging
 src/evaluate.py      # test scoring from runs.db
-scripts/             # entry points: check_data, train_v1, run_experiments, make_tables
+scripts/             # entry points: check_data, train_v1, freeze_volatility, run_experiments, evaluate, make_tables (run in this order; evaluate.py scores runs.db on the test days)
 app/dashboard.py     # Streamlit, reads runs.db only
 tests/               # leakage and budget tests
 ```
