@@ -110,3 +110,29 @@ def test_fixed_policy_never_selects_and_never_updates():
     out, sel, ups, _ = run(cfg, df, policy="A")
     assert sel.empty and ups.empty and out["n_selected"] == 0
     assert out["final_version"] == 1  # stays V1
+
+
+def test_tag_migration_keeps_old_runs_as_main(tmp_path):
+    # An old-style runs.db (no `tag` column) must gain the column with old rows = 'main'.
+    import sqlite3
+    p = tmp_path / "old.db"
+    old = sqlite3.connect(p)
+    old.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, policy TEXT, seed INTEGER, "
+                "config_hash TEXT, git_commit TEXT, start_time TEXT, end_time TEXT)")
+    old.execute("INSERT INTO runs VALUES ('E_old','E',0,'h','g','t0','t1')")
+    old.commit()
+    old.close()
+    db = harness.connect(p)
+    assert db.execute("SELECT tag FROM runs WHERE run_id='E_old'").fetchone()[0] == "main"
+
+
+def test_timings_logged_per_update_window_and_tag_stored():
+    cfg, df = make_cfg(), make_df()
+    db = harness.connect(":memory:")
+    out = harness.replay(df, cfg, "B", 0, db, tag="revision")
+    tim = pd.read_sql("SELECT * FROM timings", db)
+    ups = pd.read_sql("SELECT * FROM updates", db)
+    assert len(tim) == len(ups) > 0                      # one timing row per update
+    assert (tim.select_ms >= 0).all() and (tim.retrain_ms > 0).all()
+    assert db.execute("SELECT tag FROM runs WHERE run_id=?",
+                      (out["run_id"],)).fetchone()[0] == "revision"

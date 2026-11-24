@@ -15,8 +15,9 @@ from src import harness  # noqa: E402
 
 def _seed_db(path):
     db = harness.connect(str(path))
-    db.execute("INSERT INTO runs VALUES ('E_s0','E',0,'h','g','t0','t1')")
-    db.execute("INSERT INTO runs VALUES ('B_s0','B',0,'h','g','t0','t1')")
+    cols = "(run_id, policy, seed, config_hash, git_commit, start_time, end_time)"
+    db.execute(f"INSERT INTO runs {cols} VALUES ('E_s0','E',0,'h','g','t0','t1')")
+    db.execute(f"INSERT INTO runs {cols} VALUES ('B_s0','B',0,'h','g','t0','t1')")
     db.executemany("INSERT INTO metrics VALUES (?,?,?,?,?)", [
         ("E_s0", "test", "high_vol", "macro_f1", 0.42),
         ("E_s0", "test", "all", "macro_f1", 0.43),

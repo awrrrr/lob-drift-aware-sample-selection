@@ -34,12 +34,24 @@ CREATE TABLE IF NOT EXISTS updates (
     accepted INTEGER, val_f1_before REAL, val_f1_after REAL);
 CREATE TABLE IF NOT EXISTS metrics (
     run_id TEXT, split TEXT, condition TEXT, metric TEXT, value REAL);
+CREATE TABLE IF NOT EXISTS timings (
+    run_id TEXT, window INTEGER, select_ms REAL, retrain_ms REAL);
 """
 
 
 def connect(path):
+    """Open runs.db, creating tables if needed.
+
+    Revision migration: older databases have no `tag` column on `runs`. Add it
+    with default 'main', so every original step-5 run is tagged 'main' and new
+    revision runs can be told apart without touching the old rows.
+    """
     db = sqlite3.connect(str(path))
     db.executescript(SCHEMA)
+    cols = [r[1] for r in db.execute("PRAGMA table_info(runs)")]
+    if "tag" not in cols:
+        db.execute("ALTER TABLE runs ADD COLUMN tag TEXT DEFAULT 'main'")
+        db.commit()
     return db
 
 
@@ -78,8 +90,14 @@ def macro_f1(model, X, y):
     return f1_score(y, model.predict(X), average="macro")
 
 
-def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False):
-    """Run one policy/seed over the stream, logging to the open db connection."""
+def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag="main"):
+    """Run one policy/seed over the stream, logging to the open db connection.
+
+    `tag` labels the run in `runs` ('main' = original step 5, 'revision' = the
+    post-hoc reviewer revision). Per window, the time spent selecting (model
+    probabilities + policy) and retraining (fit + validation gate) is logged to
+    `timings`; timing does not change what is selected.
+    """
     feats = models.feature_columns(cfg)
     Xtr, ytr, _ = models.split_xy(df, cfg["splits"]["train"], cfg)
     Xva, yva, _ = models.split_xy(df, cfg["splits"]["validation"], cfg)
@@ -90,9 +108,10 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False):
     rng = np.random.default_rng(seed)
 
     run_id = f"{policy_name}_seed{seed}_{time.strftime('%Y%m%d_%H%M%S')}_{rng.integers(1e6):06d}"
-    db.execute("INSERT INTO runs VALUES (?,?,?,?,?,?,?)",
+    db.execute("INSERT INTO runs (run_id, policy, seed, config_hash, git_commit, "
+               "start_time, end_time, tag) VALUES (?,?,?,?,?,?,?,?)",
                (run_id, policy_name, seed, config_hash("config.yaml"), git_commit(),
-                time.strftime("%Y-%m-%d %H:%M:%S"), None))
+                time.strftime("%Y-%m-%d %H:%M:%S"), None, tag))
 
     # Current (accepted) model starts as a freshly fit V1.
     current = models.make_v1(cfg).fit(Xtr, ytr)
@@ -106,11 +125,13 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False):
 
     for k in range(n_windows):
         pool = stream[stream.pool_window == k]
+        t0 = time.perf_counter()
         if len(pool):
             proba = current.predict_proba(pool[feats].values)
             picks = policy(pool[["sample_id"] + feats], proba, B, rng, selected_ids, cfg)
         else:
             picks = []
+        select_ms = (time.perf_counter() - t0) * 1000
 
         if picks:
             pool_idx = {int(s): i for i, s in enumerate(pool.sample_id.to_numpy())}
@@ -125,9 +146,13 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False):
                 selected_ids.add(sid)
 
             # Candidate retrains on all training data + every sample selected so far.
+            t0 = time.perf_counter()
             cand = models.make_v1(cfg).fit(
                 np.vstack([Xtr, np.array(sel_X)]), np.concatenate([ytr, sel_y]))
             cand_val = macro_f1(cand, Xva, yva)
+            retrain_ms = (time.perf_counter() - t0) * 1000
+            db.execute("INSERT INTO timings VALUES (?,?,?,?)",
+                       (run_id, k, select_ms, retrain_ms))
             accepted = cand_val >= current_val - tol
             db.execute("INSERT INTO updates VALUES (?,?,?,?,?,?,?)",
                        (run_id, k, version + 1, version, int(accepted),

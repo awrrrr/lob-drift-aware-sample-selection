@@ -27,6 +27,8 @@ def main():
     ap.add_argument("--max-windows", type=int, default=None)
     ap.add_argument("--skip-existing", action="store_true",
                     help="skip a policy/seed already completed at the current config hash")
+    ap.add_argument("--tag", default="main",
+                    help="label stored in runs.tag: 'main' (step 5) or 'revision' (reviewer revision)")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(ROOT / "config.yaml"))
@@ -39,13 +41,14 @@ def main():
             if args.skip_existing:
                 done = db.execute(
                     "SELECT 1 FROM runs WHERE policy=? AND seed=? AND config_hash=? "
-                    "AND end_time IS NOT NULL", (policy, seed, chash)).fetchone()
+                    "AND tag=? AND end_time IS NOT NULL",
+                    (policy, seed, chash, args.tag)).fetchone()
                 if done:
                     print(f"policy {policy} seed {seed}: already done, skip", flush=True)
                     continue
             print(f"policy {policy} seed {seed} ...", flush=True)
             out = harness.replay(df, cfg, policy, seed, db,
-                                 max_windows=args.max_windows, verbose=True)
+                                 max_windows=args.max_windows, verbose=True, tag=args.tag)
             print(f"  {out}")
     db.close()
 
