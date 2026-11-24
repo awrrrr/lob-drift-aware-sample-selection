@@ -15,6 +15,7 @@ import hashlib
 import sqlite3
 import subprocess
 import time
+import uuid
 
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
@@ -112,7 +113,11 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag=
     policy = POLICIES[policy_name]
     rng = np.random.default_rng(seed)
 
-    run_id = f"{policy_name}_seed{seed}_{time.strftime('%Y%m%d_%H%M%S')}_{rng.integers(1e6):06d}"
+    # The rng draw stays (it advances the seeded stream exactly as in step 5, so
+    # selections are unchanged); the uuid suffix keeps run_ids unique when runs
+    # with the same policy and seed start in the same second in parallel.
+    run_id = (f"{policy_name}_seed{seed}_{time.strftime('%Y%m%d_%H%M%S')}_"
+              f"{rng.integers(1e6):06d}_{uuid.uuid4().hex[:6]}")
     db.execute("INSERT INTO runs (run_id, policy, seed, config_hash, git_commit, "
                "start_time, end_time, tag) VALUES (?,?,?,?,?,?,?,?)",
                (run_id, policy_name, seed, config_hash("config.yaml"), git_commit(),

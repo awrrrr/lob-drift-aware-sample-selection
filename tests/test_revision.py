@@ -161,3 +161,16 @@ def test_runs_to_score_filters_tag_unfinished_and_scored(tmp_path):
     db.execute("INSERT INTO metrics VALUES ('rev_scored','test','all','macro_f1',0.4)")
     assert evaluate.runs_to_score(db, tag="revision", skip_scored=True) == ["rev1"]
     assert "rev_unfinished" not in evaluate.runs_to_score(db)
+
+
+def test_same_policy_same_seed_runs_get_distinct_ids_and_same_picks():
+    # Parallel grid points share policy + seed: ids must differ, picks must not.
+    from tests.test_harness import make_cfg, make_df
+    import pandas as pd
+    db = harness.connect(":memory:")
+    a = harness.replay(make_df(), make_cfg(), "B", 0, db)
+    b = harness.replay(make_df(), make_cfg(), "B", 0, db)
+    assert a["run_id"] != b["run_id"]
+    q = "SELECT sample_id FROM selections WHERE run_id=? ORDER BY window, sample_id"
+    assert (pd.read_sql(q, db, params=[a["run_id"]]).sample_id.tolist()
+            == pd.read_sql(q, db, params=[b["run_id"]]).sample_id.tolist())
