@@ -122,3 +122,63 @@ Attempt notes, kept because they changed the harness:
 - **Frozen: a_low = 0.1, a_high = 0.6** (`config.yaml: revision`), by the rule fixed before the grid ran (highest final validation macro-F1). Honest note: the whole grid spans 0.00025, i.e. noise level; the original fixed-20% E seed-0 run ended at 0.45752 on the same metric. The choice is procedural, not evidence that the adaptive share helps on validation.
 - Activation: 13 of 93 stream windows have d_k > 1 (R1), so E_drift spends 30 audit picks in those 13 windows and 5 in the other 80: 390 + 400 = 790 audit picks in total, vs 930 for E's fixed 20%. E_drift therefore audits *less* than E overall, and its cluster step gets more of the budget in calm windows.
 
+## R3 — ablation (reviewer item 4)
+
+- Built: `E_minus_cluster` (fixed 20% audit + plain top-entropy) and `E_drift_minus_cluster` (drift-adaptive audit + top-entropy) via `cluster=False` on `proposed_policy`. 9 new runs (3 variants x seeds 0-2), tag `revision`, all on config hash `0c0674a15911b0a6` and commit `bbcb7e1`; every run accepted all 93 updates.
+- Reused, not rerun: A, B, C, D, E, E_minus_audit (tag `main`, step-5 config hash). Adding the `revision:` block changed the config hash, but `--skip-existing` keys on tag + hash and only new policies were launched, so nothing old was rerun or overwritten.
+- Scored on test once: `scripts/evaluate.py --tag revision --skip-scored` (only the 9 new runs). Table: `results/revision/ablation.csv` (mean ± std over seeds; pp columns are **E_drift minus the row**, positive = E_drift better).
+
+  | policy | seeds | high-vol macro-F1 | low-vol | overall | E_drift − row, high-vol (pp) |
+  |---|---|---|---|---|---|
+  | E_drift | 3 | 0.4149 ± 0.0002 | 0.4346 | 0.4339 | +0.000 |
+  | E | 5 | 0.4153 ± 0.0004 | 0.4346 | 0.4340 | -0.040 |
+  | E_minus_audit | 5 | 0.4154 ± 0.0003 | 0.4345 | 0.4338 | -0.049 |
+  | E_minus_cluster | 3 | 0.4155 ± 0.0008 | 0.4344 | 0.4338 | -0.062 |
+  | E_drift_minus_cluster | 3 | 0.4146 ± 0.0002 | 0.4343 | 0.4336 | +0.030 |
+  | A | 1 | 0.4126 ± 0.0000 | 0.4345 | 0.4335 | +0.234 |
+  | B | 5 | 0.4151 ± 0.0009 | 0.4346 | 0.4339 | -0.015 |
+  | C | 1 | 0.4150 ± 0.0000 | 0.4343 | 0.4336 | -0.010 |
+  | D | 1 | 0.4151 ± 0.0000 | 0.4355 | 0.4348 | -0.018 |
+
+- **Result: E_drift does not beat random.** On the primary metric it is 0.4149, 0.015 pp *below* B (random) and 0.040 pp below E. Every updating variant lies in 0.4146-0.4155, inside seed noise (B's seed std is 0.0009 = 0.09 pp). Removing the audit, the clustering, or the drift adaptation changes high-vol macro-F1 by at most 0.06 pp in either direction. No component has a measurable effect at B = 50/window. The only clear effect is still updating vs not (A is 0.23 pp below E_drift).
+- Consistent with R1: the drift score switches the audit share up in 13 windows where V1 was not making more errors, so auditing more there had little to correct.
+
+## R4 — statistical variation (reviewer item 5)
+
+- `scripts/revision_stats.py`: rebuilds each scored run's final model (27 runs) exactly as `src/evaluate.py` does and predicts the test days to get per-window confusion matrices. Check: recomputed high-vol macro-F1 equals the stored metric for every run (max gap 0.0e+00).
+- Method: **paired bootstrap over test windows** (W = 1000-snapshot blocks, resampled with replacement to respect time dependence), 2,000 resamples, seed 0. In each resample every run is scored on the same windows; a policy's score is its **per-seed macro-F1 averaged over seeds**. Difference = E_drift minus the other, in pp. Per-seed values: `per_seed.csv`; intervals: `bootstrap.csv`.
+- **Coarseness:** the test days have 85 windows, only **9 high-volatility**, so high-vol intervals are wide. They are honest about how little the primary condition can resolve.
+
+  | E_drift − … | high-vol diff (pp) | 95% CI | overall diff (pp) | 95% CI |
+  |---|---|---|---|---|
+  | E | -0.040 | [-0.096, +0.020] | -0.007 | [-0.033, +0.020] |
+  | E_minus_audit | -0.049 | [-0.114, +0.020] | +0.010 | [-0.011, +0.032] |
+  | E_minus_cluster | -0.062 | [-0.172, +0.022] | +0.006 | [-0.059, +0.066] |
+  | E_drift_minus_cluster | +0.030 | [-0.108, +0.145] | +0.026 | [-0.037, +0.088] |
+  | A | +0.234 | [+0.029, +0.441] | +0.034 | [-0.055, +0.113] |
+  | B | -0.015 | [-0.103, +0.064] | +0.000 | [-0.062, +0.059] |
+  | C | -0.010 | [-0.204, +0.155] | +0.028 | [-0.043, +0.098] |
+  | D | -0.018 | [-0.210, +0.193] | -0.091 | [-0.276, +0.088] |
+
+- **Every interval against another updating policy contains 0.** The only one clear of zero is E_drift − A (fixed model) on high-vol: +0.23 pp, CI [+0.03, +0.44]. Updating helps; the choice of samples does not, at this budget.
+- C, D and A are deterministic (no randomness in their selection), so their seed spread is 0 by construction, not by luck; they have one run each. E_drift and the two _minus_cluster variants have 3 seeds (R0 rule), B / E / E−audit keep their 5 step-5 seeds.
+
+## R5 — overhead only (budget sweep not run)
+
+- Per plan, the B ∈ {25,…,500} budget sweep was **not run** (deadline); it is future work.
+- `overhead.csv` (from `timings` of runs already done) and `selection_benchmark.csv` (every policy timed on the same 93 stream pools under V1's probabilities, no retraining):
+
+  | policy | selection ms / window (median) | p99 |
+  |---|---|---|
+  | B | 0.03 | 0.06 |
+  | C | 0.07 | 0.08 |
+  | D | 5.90 | 80.98 |
+  | E | 55.34 | 167.05 |
+  | E_minus_audit | 65.89 | 151.92 |
+  | E_drift | 60.55 | 132.54 |
+  | E_minus_cluster | 0.36 | 0.90 |
+  | E_drift_minus_cluster | 0.39 | 0.97 |
+
+- Retraining dominates: 5.1 s median per window when run alone (R0, E). The revision runs logged ~13 s because three ran in parallel and shared memory bandwidth, so `overhead.csv`'s retrain column for them overstates single-run cost. Selection is ≈1% of the per-window cost even for the clustering policies (55-66 ms); the cluster step is what costs (top-entropy variants: 0.4 ms). Prediction latency per snapshot is ≈0.06 ms p50 for every policy (same model class).
+- Note on step-5 latency numbers: when `scripts/evaluate.py` was added (19 Nov) it re-scored the 18 step-5 runs once to verify it. All F1 / accuracy / update values were reproduced exactly, but latency is wall-clock, so `runs.db` now holds a re-measurement (e.g. A p50 0.0598 vs 0.0603 ms) that differs slightly from `results/summary.csv`. `summary.csv` was left untouched (ground rule 1).
+

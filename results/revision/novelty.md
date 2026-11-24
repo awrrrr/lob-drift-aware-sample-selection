@@ -12,7 +12,7 @@
 
 **Contribution.** A drift-adaptive confident-prediction audit combined with cluster-diverse uncertainty sampling, evaluated under a fixed per-update budget on FI-2010 limit order book data in a leakage-safe replay protocol (horizon-aware label availability, selection before label reveal, validation-gated updates, test scored once), with ablations isolating each component.
 
-**Evidence.** The fixed-audit version (E) did not beat random: every updating policy reached ≈ 0.415 high-volatility macro-F1, within seed noise. The drift score finds volatile windows, but there the model is *more* confident and *not* less accurate (R1). The E_drift result is in `results/revision/ablation.csv` (R3); if it does not beat random, that is stated, not tuned away.
+**Evidence.** Neither E nor E_drift beat random: E_drift scored 0.4149 high-volatility macro-F1 vs 0.4151 for random (bootstrap 95% CI for the difference −0.10 to +0.06 pp), and no ablated component changed results beyond seed noise. The drift score finds volatile windows, but there the model is *more* confident and *not* less accurate. Only updating versus not updating mattered.
 
 ---
 Sources checked: Zhdanov 2019 (arXiv:1901.05954, full text: pre-filter βk, weighted k-means, nearest-to-centre pick). Žliobaitė, Bifet, Holmes, Pfahringer 2011, *MOA Concept Drift Active Learning Strategies for Streaming Data*, JMLR W&CP 17 (full text: randomised-threshold quote, Algorithm 5, DDM-based classifier replacement). The 2014 TNNLS paper's Split strategy is described from secondary sources only; its full text was not accessible.

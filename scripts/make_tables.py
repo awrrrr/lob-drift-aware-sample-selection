@@ -84,9 +84,11 @@ def revision_tables(db, out_dir):
     tab.insert(0, "runs_tag", runs.groupby("policy").tag.first().reindex(present))
     tab.insert(0, "description", [ABLATION_DESC[p] for p in present])
     if "E_drift" in present:
+        # Same sign convention as step 5 ("E - B") and bootstrap.csv:
+        # proposed minus the other row, so positive = E_drift is better.
         for key in ["high", "low", "all"]:
             ref = tab.loc["E_drift", f"macroF1_{key}_mean"]
-            tab[f"pp_vs_E_drift_{key}"] = (tab[f"macroF1_{key}_mean"] - ref) * 100
+            tab[f"pp_E_drift_minus_row_{key}"] = (ref - tab[f"macroF1_{key}_mean"]) * 100
     tab.to_csv(out_dir / "ablation.csv")
     show = [c for c in tab.columns if c.endswith("_mean") or c.startswith("pp_") or c == "n_seeds"]
     print(tab[show].round(4).to_string())
