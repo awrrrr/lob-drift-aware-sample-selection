@@ -16,9 +16,16 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "runs.db"
 
-POLICY_ORDER = ["A", "B", "C", "D", "E", "E_minus_audit"]
+POLICY_ORDER = ["A", "B", "C", "D", "E", "E_minus_audit",
+                "E_drift", "E_minus_cluster", "E_drift_minus_cluster"]
 POLICY_LABEL = {"A": "A fixed", "B": "B random", "C": "C uncertainty",
-                "D": "D density×unc", "E": "E proposed", "E_minus_audit": "E−audit"}
+                "D": "D density×unc", "E": "E proposed", "E_minus_audit": "E−audit",
+                "E_drift": "E_drift (revision)", "E_minus_cluster": "E−cluster (revision)",
+                "E_drift_minus_cluster": "E_drift−cluster (revision)"}
+# Runs shown: the original step-5 runs ('main') and scored revision runs.
+# Grid and check runs ('revision_grid:*', 'revision_check') are tuning/diagnostic
+# runs that are never test-scored, so they are left out.
+SHOWN_TAGS = ("main", "revision")
 
 
 # --------------------------------------------------------------------------- #
@@ -35,6 +42,14 @@ def load_tables(db_path):
         except Exception:
             out[name] = pd.DataFrame()
     con.close()
+    runs = out["runs"]
+    if not runs.empty and "tag" in runs.columns:
+        keep = runs.tag.fillna("main").isin(SHOWN_TAGS)
+        out["runs"] = runs[keep].reset_index(drop=True)
+        ids = set(out["runs"].run_id)
+        for name in ["selections", "updates", "metrics"]:
+            if not out[name].empty:
+                out[name] = out[name][out[name].run_id.isin(ids)].reset_index(drop=True)
     return out
 
 
@@ -99,9 +114,12 @@ def main():
 
     with tab_overview:
         st.subheader("Runs")
-        st.dataframe(runs[["run_id", "policy", "seed", "config_hash",
-                           "git_commit", "start_time", "end_time"]],
-                     use_container_width=True, hide_index=True)
+        cols = [c for c in ["run_id", "policy", "seed", "tag", "config_hash",
+                            "git_commit", "start_time", "end_time"] if c in runs.columns]
+        st.dataframe(runs[cols], use_container_width=True, hide_index=True)
+        if "tag" in runs.columns and (runs.tag == "revision").any():
+            st.caption("tag 'revision' = post-hoc reviewer revision, run after the step-5 "
+                       "test results were seen; settings chosen on validation only.")
         st.caption(f"{len(runs)} runs · "
                    f"{runs.config_hash.nunique()} config hash(es) · "
                    f"{runs.git_commit.nunique()} git commit(s)")
@@ -121,14 +139,19 @@ def main():
             show.index = [POLICY_LABEL.get(p, p) for p in show.index]
             st.dataframe(show.round(4), use_container_width=True)
 
-            if "E" in summary.index:
-                st.subheader("E vs baselines — high-vol macro-F1 (percentage points)")
+            for ref, bases in [("E", ["B", "C", "D", "E_minus_audit"]),
+                               ("E_drift", ["E", "E_minus_audit", "E_minus_cluster",
+                                            "E_drift_minus_cluster", "B", "C", "D"])]:
+                if ref not in summary.index:
+                    continue
+                st.subheader(f"{POLICY_LABEL[ref]} vs others — high-vol macro-F1 "
+                             "(percentage points)")
                 diffs = []
-                for base in ["B", "C", "D", "E_minus_audit"]:
+                for base in bases:
                     if base in summary.index:
-                        pp = (summary.loc["E", "high_vol_F1_mean"]
+                        pp = (summary.loc[ref, "high_vol_F1_mean"]
                               - summary.loc[base, "high_vol_F1_mean"]) * 100
-                        diffs.append({"comparison": f"E − {POLICY_LABEL.get(base, base)}",
+                        diffs.append({"comparison": f"{ref} − {POLICY_LABEL.get(base, base)}",
                                       "difference (pp)": round(pp, 3)})
                 st.dataframe(pd.DataFrame(diffs), use_container_width=True, hide_index=True)
 

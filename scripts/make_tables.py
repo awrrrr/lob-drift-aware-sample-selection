@@ -7,8 +7,15 @@ over seeds per policy, and writes:
   results/high_vol_macrof1.png bar chart with per-seed spread
 
 Usage:  .venv/bin/python scripts/make_tables.py
+        .venv/bin/python scripts/make_tables.py --revision
+
+The default reads only runs tagged 'main' (the original step 5), so it
+reproduces results/summary.csv exactly. --revision (post-hoc reviewer
+revision) writes results/revision/ablation.csv and overhead.csv instead and
+never touches the step-5 files.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -29,8 +36,11 @@ POLICY_LABEL = {"A": "A fixed", "B": "B random", "C": "C uncert",
                 "D": "D dens×unc", "E": "E proposed", "E_minus_audit": "E−audit"}
 
 
-def load(db):
-    runs = pd.read_sql("SELECT run_id, policy, seed FROM runs", db)
+def load(db, tags=("main",)):
+    """Runs with one of `tags` (finished only) and their metrics."""
+    marks = ",".join("?" * len(tags))
+    runs = pd.read_sql(f"SELECT run_id, policy, seed, tag FROM runs "
+                       f"WHERE tag IN ({marks}) AND end_time IS NOT NULL", db, params=list(tags))
     metrics = pd.read_sql("SELECT * FROM metrics", db)
     m = metrics.merge(runs, on="run_id")
     return runs, m
@@ -48,9 +58,70 @@ def agg(series):
     return g.mean(), g.std().fillna(0.0)
 
 
+ABLATION_ORDER = ["E_drift", "E", "E_minus_audit", "E_minus_cluster",
+                  "E_drift_minus_cluster", "A", "B", "C", "D"]
+ABLATION_DESC = {
+    "E_drift": "full: cluster diversity + audit + drift adaptation",
+    "E": "no drift adaptation (fixed 20% audit)",
+    "E_minus_audit": "no audit",
+    "E_minus_cluster": "fixed audit + top-entropy (no clustering)",
+    "E_drift_minus_cluster": "drift-adaptive audit + top-entropy (no clustering)",
+    "A": "baseline: fixed model", "B": "baseline: random",
+    "C": "baseline: uncertainty", "D": "baseline: density x uncertainty (adapted from Liu et al.)",
+}
+
+
+def revision_tables(db, out_dir):
+    """R3 ablation table and R5 overhead table (post-hoc revision)."""
+    runs, m = load(db, tags=("main", "revision"))
+    present = [p for p in ABLATION_ORDER if p in set(runs.policy)]
+    rows = {}
+    for key, cond in [("high", "high_vol"), ("low", "low_vol"), ("all", "all")]:
+        mean, std = agg(pick(m, "test", cond, "macro_f1"))
+        rows[f"macroF1_{key}_mean"], rows[f"macroF1_{key}_std"] = mean, std
+    tab = pd.DataFrame(rows).reindex(present)
+    tab.insert(0, "n_seeds", runs.groupby("policy").seed.nunique().reindex(present))
+    tab.insert(0, "runs_tag", runs.groupby("policy").tag.first().reindex(present))
+    tab.insert(0, "description", [ABLATION_DESC[p] for p in present])
+    if "E_drift" in present:
+        for key in ["high", "low", "all"]:
+            ref = tab.loc["E_drift", f"macroF1_{key}_mean"]
+            tab[f"pp_vs_E_drift_{key}"] = (tab[f"macroF1_{key}_mean"] - ref) * 100
+    tab.to_csv(out_dir / "ablation.csv")
+    show = [c for c in tab.columns if c.endswith("_mean") or c.startswith("pp_") or c == "n_seeds"]
+    print(tab[show].round(4).to_string())
+
+    # Overhead (R5): per policy, from the `timings` rows of runs that have them.
+    tim = pd.read_sql("SELECT t.*, r.policy, r.tag FROM timings t JOIN runs r USING(run_id) "
+                      "WHERE r.tag IN ('revision', 'revision_check')", db)
+    lat = m[m.split == "latency"].pivot_table(index="policy", columns="metric",
+                                               values="value", aggfunc="mean")
+    ov = tim.groupby("policy").agg(
+        n_windows=("window", "size"),
+        select_ms_median=("select_ms", "median"),
+        select_ms_p99=("select_ms", lambda s: s.quantile(0.99)),
+        retrain_ms_median=("retrain_ms", "median"),
+        retrain_ms_p99=("retrain_ms", lambda s: s.quantile(0.99)))
+    ov = ov.join(lat.rename(columns={"p50_ms": "predict_p50_ms", "p99_ms": "predict_p99_ms"}),
+                 how="left")
+    ov.to_csv(out_dir / "overhead.csv")
+    print("\nOverhead (timed runs only; ms per window, prediction per snapshot):")
+    print(ov.round(2).to_string())
+    print(f"\nWrote {out_dir.relative_to(ROOT)}/ablation.csv and overhead.csv")
+
+
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--revision", action="store_true",
+                    help="write the post-hoc revision tables to results/revision/")
+    args = ap.parse_args()
     cfg = yaml.safe_load(open(ROOT / "config.yaml"))
     db = sqlite3.connect(ROOT / cfg["harness"]["runs_db"])
+    if args.revision:
+        out = ROOT / "results" / "revision"
+        out.mkdir(parents=True, exist_ok=True)
+        revision_tables(db, out)
+        return
     runs, m = load(db)
     present = [p for p in POLICY_ORDER if p in set(runs.policy)]
 

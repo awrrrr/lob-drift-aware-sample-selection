@@ -62,3 +62,48 @@ Backup of runs.db before the revision: `data/processed/runs_pre_revision.db`.
   wrong. This is consistent with the step-5 regime analysis (high-vol test windows
   are mostly Up/Down, Stationary 14%).
 
+## R2 — in progress (grid running)
+
+Attempt notes, kept because they changed the harness:
+- First parallel launch: three of four grid runs failed `database is locked` — replay held
+  one write transaction per run. Fixed: commits per window (`2a2aef2`).
+- Second launch: three failed `UNIQUE constraint failed: runs.run_id` — same policy + seed
+  started in the same second produce the same run_id. Fixed: uuid suffix; the seeded rng
+  draw is kept so selections are unchanged (`417ea3b`).
+- Third launch: runs starved each other — a window held the write lock across its ~5 s
+  retrain. Fixed: selections are committed *before* labels are read, retraining holds no
+  lock, timings + gate decision go in a second short transaction (`882da44`). Verified: E
+  seed 0's first 5 windows are identical to the original run. Incomplete grid rows from the
+  stalled attempt (3 runs, 2,250 selections) were deleted; the 18 `main` runs untouched.
+- Throughput: with 4 parallel runs, retrain takes ~24 s per window vs 5.1 s alone (fitting
+  on the 178k base is memory-bandwidth-bound on this laptop; memory pressure high). Total
+  throughput is the same either way, ≈ 9 min of compute per run.
+
+## R7 — novelty text (committed before R2 finished; the grid is compute-bound)
+
+- `results/revision/novelty.md`, 398 words, for the report.
+- Sources verified from full text: Zhdanov 2019 (arXiv:1901.05954): pre-filter βk most
+  informative, weighted k-means, pick nearest the centre; reports most-informative-per-
+  cluster performs the same. Žliobaitė, Bifet, Holmes, Pfahringer 2011 (JMLR W&CP 17):
+  randomised uncertainty threshold η ~ N(1, δ), explicitly to "label the instances about
+  which the classifier is very certain" so drift is not missed; DDM-based classifier
+  replacement.
+- **Honest consequence:** auditing confident predictions to catch drift is Žliobaitė et
+  al.'s idea. What differs here is the explicit budget share, sampling only from confident
+  predictions, and adapting the share to a measured drift score. The cluster step is a
+  close variant of Zhdanov 2019 and is not claimed as new.
+- Not verified: the 2014 TNNLS full text (Split strategy) was not accessible (IEEE page
+  empty, ResearchGate 403); Split is described from secondary sources only, and the text
+  says so.
+
+## R6 — leakage statement
+
+- `results/revision/leakage.md`: one row per rule (time-ordered splits, horizon carry-over,
+  select-then-reveal, label-free drift score, train-only volatility threshold, test scored
+  once, revision settings from validation), each pointing at the code and the test that
+  enforces it. Ends with the honest caveat that the revision was designed after the step-5
+  test results were known.
+- New tests: `test_volatility_threshold_ignores_non_training_days` (making days 6-10 50x
+  more volatile leaves the threshold unchanged); `drift_score` refuses `target`/`label*`
+  columns (from R1); the harness never hands policies the target (from R1).
+

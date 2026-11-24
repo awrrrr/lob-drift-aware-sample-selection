@@ -210,3 +210,17 @@ def test_volatility_threshold_ignores_non_training_days():
     df.loc[later, "f0"] *= 50.0          # make validation/stream/test days wildly volatile
     df.loc[later, "f2"] *= 50.0
     assert data.fit_volatility_threshold(df, CFG) == before
+
+
+def test_bootstrap_macro_f1_matches_sklearn():
+    import importlib.util
+    from sklearn.metrics import f1_score
+    spec = importlib.util.spec_from_file_location("revision_stats",
+                                                  ROOT / "scripts" / "revision_stats.py")
+    rs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rs)
+    rng = np.random.default_rng(0)
+    y, p = rng.integers(0, 3, 500), rng.integers(0, 3, 500)
+    conf = np.zeros((3, 3))
+    np.add.at(conf, (y, p), 1)
+    assert rs.macro_f1_from_conf(conf) == pytest.approx(f1_score(y, p, average="macro"))

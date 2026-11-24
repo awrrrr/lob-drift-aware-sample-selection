@@ -43,3 +43,20 @@ def test_load_tables_and_summarize(tmp_path):
 
 def test_summarize_empty_is_empty():
     assert dashboard.summarize({"runs": pd.DataFrame(), "metrics": pd.DataFrame()}).empty
+
+
+def test_dashboard_hides_grid_and_check_runs(tmp_path):
+    p = tmp_path / "r.db"
+    db = harness.connect(str(p))
+    cols = "(run_id, policy, seed, config_hash, git_commit, start_time, end_time, tag)"
+    for rid, pol, tag in [("E_main", "E", "main"), ("E_check", "E", "revision_check"),
+                          ("Ed_grid", "E_drift", "revision_grid:a_low=0.1,a_high=0.4"),
+                          ("Ed_rev", "E_drift", "revision")]:
+        db.execute(f"INSERT INTO runs {cols} VALUES (?,?,0,'h','g','t0','t1',?)", (rid, pol, tag))
+        db.execute("INSERT INTO updates VALUES (?,0,2,1,1,0.4,0.4)", (rid,))
+    db.commit()
+    db.close()
+    t = dashboard.load_tables(p)
+    assert set(t["runs"].run_id) == {"E_main", "Ed_rev"}
+    assert set(t["updates"].run_id) == {"E_main", "Ed_rev"}
+    assert dashboard.ordered_policies(t["runs"]) == ["E", "E_drift"]
