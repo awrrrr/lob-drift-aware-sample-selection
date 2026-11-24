@@ -60,11 +60,28 @@ top-B rules), and B, E, E−audit (5 seeds each — they use randomness, so we m
 spread). That's 1+1+1+5+5+5 = 18.
 
 ### Results tab — the headline (and the honest finding)
-The bar chart is **high-volatility test macro-F1 by policy**. All six bars sit at
-≈ 0.415.
-> "This flatness *is* the result. Once you update at all, the smart policies (C, D, E)
-> don't beat random (B) within seed noise. The only real gain is updating vs. the
-> fixed model — about +0.25 points — and random gets that too."
+Read it top to bottom; it answers four questions in order. Separate them out loud:
+"the model learns" and "selection doesn't matter" are different claims.
+
+1. **Did the model learn?** V1 scores 0.4335 macro-F1 against 0.333 for random
+   guessing (+10 pp). Every class is above the orange chance line; always predicting
+   one class scores only ≈ 0.17.
+   > "So the model clearly learns. The flat results below are about *which samples*
+   > it learns from, not whether it learns."
+2. **What does updating add?** Each dot is one seed's gain over the fixed model A, in
+   percentage points. On high-volatility windows every policy sits right of zero
+   (about +0.2 to +0.3 pp) and the policies overlap. Switch to "all" or "low-volatility"
+   to show the gains hug zero there.
+3. **Is any difference significant?** E_drift vs each policy with bootstrap 95% CIs.
+   Only the interval against A clears zero.
+4. **Why so flat?** The learning curve: more data does help (0.4335 → 0.4432 with all
+   93k stream samples), but the budget used (4,650 samples, the dashed line) adds only
+   2.6% to the 178k base.
+   > "This flatness *is* the result. Once you update at all, the smart policies don't
+   > beat random within seed noise, because the budget is too small next to the base."
+
+The axes are honest: bars start at zero, and the gain/CI charts are in percentage
+points because the differences themselves are fractions of a point. If asked, say so.
 
 Scroll down for the **summary table** (overall / low-vol / accuracy, updates
 accepted vs rejected, latency) and the **E vs baselines** differences in percentage
@@ -72,7 +89,7 @@ points. Note `E − E−audit = −0.009 pp`: the audit share didn't help here.
 
 ### Per-policy tab — the mechanism
 Pick a policy to show updates accepted/rejected, the validation-F1 trajectory during
-replay, the selection-reason breakdown, and per-snapshot prediction latency (p50/p99).
+replay (zoomed axis, dashed line = V1 before any update; the caption gives the change), the selection-reason breakdown, and per-snapshot prediction latency (p50/p99).
 > "The policies really do pick different samples — D selects 61% Stationary, and
 > cross-policy overlap is low (Jaccard ≤ 0.35). They just don't *matter* at this budget."
 
