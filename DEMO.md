@@ -138,13 +138,63 @@ Run the tests to show the leakage/budget guarantees pass:
 
 ---
 
-## 5. Quick reference
+## 5. Revisions after the faculty review (post-hoc)
+
+The review asked to (i) define how drift is detected and (ii) show how selection
+changes under drift. Everything here was added **after** the step-5 test results
+were seen; settings were chosen on day-6 validation only and the test days were
+scored once. Full record: `results/revision/LOG.md`.
+
+**The drift indicator (d_k).** For each update window: the average recent mid-price
+volatility of the window's samples ÷ the volatility threshold frozen on training
+days. d_k > 1 means "more volatile than the top quarter of training windows". It
+uses only past prices, never labels (`src/data.py: drift_score`).
+Show `results/revision/drift_trajectory.png`. 13 of 93 stream windows have d_k > 1.
+
+**How selection changes under drift (E_drift).** Same budget of 50 per window. In
+calm windows 10% of it (5 picks) audits confident predictions and the rest goes to
+cluster-diverse uncertain samples. When d_k > 1, the audit rises to 60% (30 picks).
+The 0.1 / 0.6 split was picked on validation (`audit_grid.csv`).
+
+**What it found** (`ablation.csv`, `bootstrap.csv`):
+- E_drift: 0.4149 high-vol macro-F1, vs 0.4151 for random. **It does not win**; the
+  95% CI for the difference is −0.10 to +0.06 pp.
+- Removing the audit, the clustering, or the drift adaptation changes nothing beyond
+  seed noise. Only updating vs not updating matters (+0.23 pp, CI clear of zero).
+- Why (`drift_vs_v1.png`): volatile windows are where the model is *more* confident and
+  *not* more wrong, so auditing more there has little to correct.
+
+**Likely question: "So the drift-aware version also failed?"**
+> "Yes, and the drift diagnostic explains why. Volatility does detect a regime change,
+> but on this stream the change makes the model more confident and no less accurate.
+> So spending more of the budget auditing confident predictions there can't help. I
+> picked the settings on validation, scored test once, and report the null result
+> with confidence intervals instead of tuning until something won."
+
+**Novelty, honestly** (`results/revision/novelty.md`): auditing confident predictions
+to catch drift goes back to Žliobaitė et al.; the cluster step is close to Zhdanov
+(2019). What's ours is the explicit, drift-adaptive audit share under a fixed
+per-update budget, tested in a leakage-safe replay. Leakage rules → tests:
+`results/revision/leakage.md`.
+
+**In the dashboard:** E_drift and the two −cluster ablations appear as "(revision)"
+policies, and the Results tab adds an "E_drift vs others" table. Grid and check runs
+are hidden.
+
+**Not done (future work):** budget sweep (B = 25…500) and a second independent
+dataset (no comparable free labelled LOB dataset; LOBSTER is paid).
+
+---
+
+## 6. Quick reference
 
 | Thing | Where |
 |---|---|
 | Frozen protocol & all settings | `CLAUDE.md`, `config.yaml` |
 | Results tables & plots | `results/summary.csv`, `results/differences.csv`, `results/*.png` |
-| Raw numbers for every run | `runs.db` (tables: runs, selections, updates, metrics) |
-| Policies (A–E, ablation) | `src/policies.py` |
+| Revision results (post-hoc) | `results/revision/` (LOG.md first) |
+| Raw numbers for every run | `runs.db` (tables: runs, selections, updates, metrics, timings) |
+| Policies (A–E, ablation, E_drift) | `src/policies.py` |
+| Drift score | `src/data.py: drift_score` |
 | Replay harness + gate | `src/harness.py` |
 | Dashboard (viewer only) | `app/dashboard.py` |

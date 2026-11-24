@@ -182,3 +182,15 @@ Attempt notes, kept because they changed the harness:
 - Retraining dominates: 5.1 s median per window when run alone (R0, E). The revision runs logged ~13 s because three ran in parallel and shared memory bandwidth, so `overhead.csv`'s retrain column for them overstates single-run cost. Selection is ≈1% of the per-window cost even for the clustering policies (55-66 ms); the cluster step is what costs (top-entropy variants: 0.4 ms). Prediction latency per snapshot is ≈0.06 ms p50 for every policy (same model class).
 - Note on step-5 latency numbers: when `scripts/evaluate.py` was added (19 Nov) it re-scored the 18 step-5 runs once to verify it. All F1 / accuracy / update values were reproduced exactly, but latency is wall-clock, so `runs.db` now holds a re-measurement (e.g. A p50 0.0598 vs 0.0603 ms) that differs slightly from `results/summary.csv`. `summary.csv` was left untouched (ground rule 1).
 
+## R8 — wrap-up: reviewer item → what was done → evidence
+
+1. **Clarify novelty** → 399-word statement verified against Zhdanov 2019 and Žliobaitė et al. 2011; concedes confident-prediction auditing (Žliobaitė) and clustered uncertainty (Zhdanov) are prior ideas; claims the drift-adaptive audit share under a fixed per-update budget. → `novelty.md`
+2. **Define drift detection (priority i)** → label-free d_k = window pool volatility / train-frozen threshold; 13/93 stream windows drift; d_k tracks V1 confidence (r = −0.63), not V1 error (r = +0.06). → `drift_summary.txt`, `drift_trajectory.png`, `drift_vs_v1.png`, `src/data.py`
+3. **Adaptive confidence auditing (priority ii)** → E_drift: audit 10% of B when calm, 60% when d_k > 1 (chosen on day-6 validation; grid spread 0.00025), B equal across methods. → `audit_grid.csv`, `config.yaml: revision`, `src/policies.py`
+4. **Ablation** → full E_drift vs no-drift-adaptation (E), no-audit, no-cluster, drift-adaptive-no-cluster: all within 0.06 pp of each other on high-vol macro-F1. → `ablation.csv`
+5a. **Statistical variation** → paired window bootstrap, 2,000 resamples: every CI vs another updating policy contains 0; only updating vs fixed is clear (+0.23 pp, [+0.03, +0.44]). → `bootstrap.csv`, `per_seed.csv`
+5b. **Computational overhead** → selection ≤ 66 ms/window vs ~5 s retraining; prediction ≈ 0.06 ms/snapshot. → `overhead.csv`, `selection_benchmark.csv`
+5c. **Leakage** → every rule mapped to code + test; selections now committed before any label is read. → `leakage.md`, `tests/`
+5d. **Different sample budgets** → **not done, future work** (deadline; the failure analysis predicts selection matters only at larger budgets — this sweep would test it).
+5e. **Another independent dataset** → **not done, future work**: no comparable free, labelled LOB dataset is readily available (LOBSTER is paid).
+**Bottom line:** E_drift does not beat random (0.4149 vs 0.4151, CI −0.10 to +0.06 pp). Reported as a null result, settings never tuned on days 9-10. Dashboard shows the revision runs (`app/dashboard.py`); `DEMO.md` §5 has the talking points. Optional d_k-per-window dashboard panel not added (the dashboard reads `runs.db` only; d_k lives in `drift_windows.csv`).
