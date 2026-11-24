@@ -147,32 +147,42 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag=
         select_ms = (time.perf_counter() - t0) * 1000
 
         if picks:
+            # 1. Log the selected ids and reasons, and commit, BEFORE any label is
+            #    read (leakage rule 2). Committing here also keeps the write lock
+            #    short, so parallel runs can share runs.db.
             pool_idx = {int(s): i for i, s in enumerate(pool.sample_id.to_numpy())}
             for sid, reason in picks:
-                row = stream.loc[stream.sample_id == sid].iloc[0]
                 p = proba[pool_idx[sid]]
                 db.execute("INSERT INTO selections VALUES (?,?,?,?,?,?,?,?)",
                            (run_id, k, sid, reason, float(p[0]), float(p[1]),
                             float(p[2]), version))
+            db.commit()
+
+            # 2. Reveal labels of the selected samples only.
+            for sid, reason in picks:
+                row = stream.loc[stream.sample_id == sid].iloc[0]
                 sel_X.append(row[feats].to_numpy(dtype=float))
                 sel_y.append(int(row.target))
                 selected_ids.add(sid)
 
-            # Candidate retrains on all training data + every sample selected so far.
+            # 3. Candidate retrains on all training data + every sample selected so
+            #    far (no database lock held while fitting).
             t0 = time.perf_counter()
             cand = models.make_v1(cfg).fit(
                 np.vstack([Xtr, np.array(sel_X)]), np.concatenate([ytr, sel_y]))
             cand_val = macro_f1(cand, Xva, yva)
             retrain_ms = (time.perf_counter() - t0) * 1000
+            accepted = cand_val >= current_val - tol
+
+            # 4. Log the gate decision and timings in a second short transaction.
             db.execute("INSERT INTO timings VALUES (?,?,?,?)",
                        (run_id, k, select_ms, retrain_ms))
-            accepted = cand_val >= current_val - tol
             db.execute("INSERT INTO updates VALUES (?,?,?,?,?,?,?)",
                        (run_id, k, version + 1, version, int(accepted),
                         current_val, cand_val))
+            db.commit()
             if accepted:
                 current, current_val, version = cand, cand_val, version + 1
-            db.commit()   # short transactions, so parallel runs can share runs.db
             if verbose:
                 print(f"  window {k:4d}: pool {len(pool):4d} picked {len(picks):3d} "
                       f"val {current_val:.4f} cand {cand_val:.4f} "

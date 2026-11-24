@@ -139,14 +139,31 @@ def test_e_unchanged_by_cluster_flag_default():
 
 # --- parallel-safe logging and scoring filters ----------------------------------
 
-def test_two_replays_can_share_one_db_file(tmp_path):
-    # Per-window commits: a second connection can write while a run is logged.
+def test_parallel_replays_share_one_db_file(tmp_path):
+    # Runs write short transactions (selections committed before labels are read,
+    # no lock held while retraining), so concurrent runs on one file all finish.
+    import threading
     from tests.test_harness import make_cfg, make_df
     p = tmp_path / "shared.db"
-    a, b = harness.connect(p), harness.connect(p)
-    harness.replay(make_df(), make_cfg(), "B", 0, a, tag="revision")
-    harness.replay(make_df(), make_cfg(), "B", 1, b, tag="revision")
-    assert a.execute("SELECT COUNT(*) FROM runs WHERE end_time IS NOT NULL").fetchone()[0] == 2
+    harness.connect(p).close()
+    errors = []
+
+    def work(seed):
+        try:
+            db = harness.connect(p)
+            harness.replay(make_df(), make_cfg(), "B", seed, db, tag="revision")
+            db.close()
+        except Exception as e:      # noqa: BLE001 -- surfaced by the assert below
+            errors.append(repr(e))
+
+    threads = [threading.Thread(target=work, args=(s,)) for s in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=120)
+    assert not errors
+    db = harness.connect(p)
+    assert db.execute("SELECT COUNT(*) FROM runs WHERE end_time IS NOT NULL").fetchone()[0] == 4
 
 
 def test_runs_to_score_filters_tag_unfinished_and_scored(tmp_path):
@@ -174,3 +191,22 @@ def test_same_policy_same_seed_runs_get_distinct_ids_and_same_picks():
     q = "SELECT sample_id FROM selections WHERE run_id=? ORDER BY window, sample_id"
     assert (pd.read_sql(q, db, params=[a["run_id"]]).sample_id.tolist()
             == pd.read_sql(q, db, params=[b["run_id"]]).sample_id.tolist())
+
+
+def test_volatility_threshold_ignores_non_training_days():
+    # Leakage rule 4: the threshold (and so d_k's scale) depends on days 1-5 only.
+    rng = np.random.default_rng(0)
+    frames = []
+    for day in range(1, 11):
+        mid = np.cumsum(rng.standard_normal(400))
+        cols = {f"f{c}": 0.0 for c in range(144)}
+        cols["f0"], cols["f2"] = mid, mid - 0.01
+        cols.update(day=day, stock_id=0, t=np.arange(400), target=0)
+        frames.append(pd.DataFrame(cols))
+    df = pd.concat(frames, ignore_index=True)
+    df.insert(0, "sample_id", np.arange(len(df)))
+    before = data.fit_volatility_threshold(df, CFG)
+    later = df.day >= 6
+    df.loc[later, "f0"] *= 50.0          # make validation/stream/test days wildly volatile
+    df.loc[later, "f2"] *= 50.0
+    assert data.fit_volatility_threshold(df, CFG) == before
