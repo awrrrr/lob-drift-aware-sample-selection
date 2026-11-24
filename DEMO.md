@@ -164,6 +164,35 @@ The 0.1 / 0.6 split was picked on validation (`audit_grid.csv`).
 - Why (`drift_vs_v1.png`): volatile windows are where the model is *more* confident and
   *not* more wrong, so auditing more there has little to correct.
 
+**Are the new results significant?** No, except one weak comparison. Paired bootstrap
+over test windows (2000 resamples, seed-averaged), high-vol macro-F1, in pp
+(`results/revision/bootstrap.csv`):
+
+| E_drift vs | Diff (pp) | 95% CI (pp) | Significant? |
+|---|---|---|---|
+| B random | −0.015 | −0.10 to +0.06 | No |
+| C uncertainty | −0.010 | −0.20 to +0.16 | No |
+| D density×uncertainty | −0.018 | −0.21 to +0.19 | No |
+| E (fixed audit) | −0.040 | −0.10 to +0.02 | No |
+| E−audit | −0.049 | −0.11 to +0.02 | No |
+| E−cluster | −0.062 | −0.17 to +0.02 | No |
+| E_drift−cluster | +0.030 | −0.11 to +0.14 | No |
+| A fixed (no updates) | +0.234 | +0.03 to +0.44 | Yes, barely |
+
+- Drift adaptation, the audit and clustering have no measurable effect: the differences
+  are hundredths of a point, the same size as the seed-to-seed spread.
+- The one significant result (vs A) only shows that updating at all helps, and random
+  gets the same gain. It is small (0.23 pp), rests on just 9 high-vol test windows,
+  vanishes over all 85 test windows (every all-window CI contains 0), and sits at the
+  edge of a Bonferroni correction for the 8 comparisons.
+- "Not significant" is not "no effect": with 9 high-vol windows the intervals are
+  ±0.1–0.2 pp wide. The honest claim is that **any effect of the selection strategy is
+  smaller than ~0.1–0.2 F1 points at this budget**, which is practically negligible.
+
+> Viva answer: "No. The only significant result is updating vs the fixed model, and
+> random gets that too. The intervals rule out any practically meaningful gain from
+> smart selection at B = 50, which matches the learning-curve diagnosis."
+
 **Likely question: "So the drift-aware version also failed?"**
 > "Yes, and the drift diagnostic explains why. Volatility does detect a regime change,
 > but on this stream the change makes the model more confident and no less accurate.
