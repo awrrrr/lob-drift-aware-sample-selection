@@ -80,5 +80,8 @@ volatility:
 revision:
   seeds: [0, 1, 2]        # R0: one E run took > 10 min, so 3 seeds for new variants
   audit_grid: [[0.1, 0.4], [0.2, 0.4], [0.0, 0.4], [0.1, 0.6]]   # (a_low, a_high), seed 0
-  audit_low: null          # frozen from the R2 grid (final validation macro-F1)
-  audit_high: null
+  # Frozen from the R2 grid by final day-6 macro-F1, seed 0 (results/revision/audit_grid.csv):
+  # (0.1, 0.6) 0.45756 > (0.1, 0.4) 0.45750 > (0.2, 0.4) 0.45737 > (0.0, 0.4) 0.45731.
+  # The whole grid spans 0.00025 (noise level); the rule was set before the grid ran.
+  audit_low: 0.1           # calm windows (d_k <= 1): 5 of B = 50 audit picks
+  audit_high: 0.6          # drifting windows (d_k > 1): 30 of B = 50 audit picks

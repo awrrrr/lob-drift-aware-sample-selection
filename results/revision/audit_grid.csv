@@ -1,0 +1,5 @@
+tag,run_id,final_val_macro_f1,acc,rej,a_low,a_high
+"revision_grid:a_low=0.1,a_high=0.6",E_drift_seed0_20261124_135909_850624_090435,0.45755757782776324,93,0,0.1,0.6
+"revision_grid:a_low=0.1,a_high=0.4",E_drift_seed0_20261124_135909_850624_c83e05,0.45750122652941244,93,0,0.1,0.4
+"revision_grid:a_low=0.2,a_high=0.4",E_drift_seed0_20261124_135909_850624_3baaa1,0.45737316184563764,93,0,0.2,0.4
+"revision_grid:a_low=0.0,a_high=0.4",E_drift_seed0_20261124_135909_850624_5cadc5,0.4573072824975899,93,0,0.0,0.4
