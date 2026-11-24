@@ -19,7 +19,7 @@ import time
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from src import models
+from src import data, models
 from src.policies import POLICIES
 
 SCHEMA = """
@@ -72,12 +72,15 @@ def build_stream(df, cfg):
 
     Adds: stream_pos (0..N-1), rows_after (rows left in the stock-day),
     selectable (target present and >= horizon rows left), pool_window
-    (the window a selectable sample belongs to, else -1).
+    (the window a selectable sample belongs to, else -1), and snap_vol (the
+    row's rolling mid-price volatility from current and past prices only;
+    label-free, used by the drift score in src/data.py).
     """
     W = cfg["harness"]["window"]
     horizon = cfg["data"]["horizon_snapshots"]
     stream = (df[df.day.isin(cfg["splits"]["stream"])]
               .sort_values(["day", "stock_id", "t"]).reset_index(drop=True).copy())
+    stream["snap_vol"] = data.snapshot_volatility(stream, cfg["volatility"]["vol_window"])
     stream["stream_pos"] = np.arange(len(stream))
     stream["rows_after"] = stream.groupby(["day", "stock_id"]).cumcount(ascending=False)
     stream["selectable"] = (stream.target >= 0) & (stream.rows_after >= horizon)
@@ -128,7 +131,9 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag=
         t0 = time.perf_counter()
         if len(pool):
             proba = current.predict_proba(pool[feats].values)
-            picks = policy(pool[["sample_id"] + feats], proba, B, rng, selected_ids, cfg)
+            # Policies get ids, features and snap_vol (label-free) -- never the target.
+            picks = policy(pool[["sample_id"] + feats + ["snap_vol"]], proba, B, rng,
+                           selected_ids, cfg)
         else:
             picks = []
         select_ms = (time.perf_counter() - t0) * 1000

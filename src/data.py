@@ -266,3 +266,36 @@ def classify_windows(df, days, cfg, threshold):
     stream["win_vol"] = stream["window"].map(wv)
     stream["high_vol"] = stream["win_vol"] > threshold
     return stream[["sample_id", "window", "win_vol", "high_vol"]]
+
+
+# ---------------------------------------------------------------------------
+# Drift indicator (post-hoc reviewer revision, R1)
+#
+# d_k = mean snapshot volatility of window k's selectable pool / the frozen
+# volatility threshold. d_k > 1: the window is more volatile than the upper
+# quartile of training-day windows, i.e. a high-volatility regime relative to
+# training. It is label-free (leakage rule 2): snapshot volatility uses only
+# current and past level-1 prices from the feature columns, and every pool row
+# has already been observed when the pool is formed. The threshold was fitted
+# on days 1-5 only (rule 4).
+# ---------------------------------------------------------------------------
+
+LABEL_COLUMNS = ("target",)
+
+
+def drift_score(pool, cfg):
+    """Label-free drift score d_k of one window's pool (see block comment above).
+
+    `pool` must carry a `snap_vol` column (snapshot_volatility of each row).
+    Raises if a label column is present: selection must never be handed labels.
+    Rows whose volatility is not yet defined (the first vol_window rows of a
+    stock-day) are ignored; a pool with no defined value scores 0.0 (calm).
+    """
+    bad = [c for c in pool.columns if c in LABEL_COLUMNS or str(c).startswith("label")]
+    if bad:
+        raise ValueError(f"drift_score must not see label columns: {bad}")
+    v = pool["snap_vol"].to_numpy(dtype=float)
+    v = v[~np.isnan(v)]
+    if len(v) == 0:
+        return 0.0
+    return float(v.mean() / cfg["volatility"]["threshold"])

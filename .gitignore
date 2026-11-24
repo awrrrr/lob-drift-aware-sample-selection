@@ -9,3 +9,4 @@ __pycache__/
 runs.db
 .claude/launch.json
 .streamlit/
+logs/

@@ -1,0 +1,8 @@
+stream windows: 93; windows with d_k > 1: 13 (14.0%)  [day 7: 5, day 8: 8]
+d_k: min 0.209, median 0.687, max 1.672
+day-6 V1 mean entropy (reference): 1.0287
+d_k vs V1 macro-F1 (labels, diagnostic): Pearson r = +0.057 (p = 0.587), Spearman rho = +0.075 (p = 0.474)
+d_k vs V1 mean entropy: Pearson r = -0.626 (p = 1.95e-11), Spearman rho = -0.660 (p = 6.47e-13)
+d_k vs entropy ratio: Pearson r = -0.626 (p = 1.95e-11), Spearman rho = -0.660 (p = 6.47e-13)
+V1 macro-F1: d_k > 1 windows 0.4139  vs  d_k <= 1 windows 0.3948
+entropy ratio: d_k > 1 windows 0.9852  vs  d_k <= 1 windows 1.0096

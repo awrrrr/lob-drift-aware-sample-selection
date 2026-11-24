@@ -31,8 +31,13 @@ def entropy(proba):
     return -(p * np.log(p)).sum(axis=1)
 
 
+# Pool columns that are not model features: the id, and the row's label-free
+# volatility (used only by the drift score, never as a feature).
+NON_FEATURES = ("sample_id", "snap_vol")
+
+
 def _ids_feats(pool):
-    feats = [c for c in pool.columns if c != "sample_id"]
+    feats = [c for c in pool.columns if c not in NON_FEATURES]
     return pool["sample_id"].to_numpy(), pool[feats].to_numpy(), feats
 
 
