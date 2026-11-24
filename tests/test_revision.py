@@ -135,3 +135,29 @@ def test_e_unchanged_by_cluster_flag_default():
     with_vol = call("E", pool, proba)
     without = call("E", pool.drop(columns="snap_vol"), proba)
     assert with_vol == without
+
+
+# --- parallel-safe logging and scoring filters ----------------------------------
+
+def test_two_replays_can_share_one_db_file(tmp_path):
+    # Per-window commits: a second connection can write while a run is logged.
+    from tests.test_harness import make_cfg, make_df
+    p = tmp_path / "shared.db"
+    a, b = harness.connect(p), harness.connect(p)
+    harness.replay(make_df(), make_cfg(), "B", 0, a, tag="revision")
+    harness.replay(make_df(), make_cfg(), "B", 1, b, tag="revision")
+    assert a.execute("SELECT COUNT(*) FROM runs WHERE end_time IS NOT NULL").fetchone()[0] == 2
+
+
+def test_runs_to_score_filters_tag_unfinished_and_scored(tmp_path):
+    from src import evaluate
+    db = harness.connect(tmp_path / "r.db")
+    cols = "(run_id, policy, seed, config_hash, git_commit, start_time, end_time, tag)"
+    for rid, end, tag in [("main1", "t", "main"), ("rev1", "t", "revision"),
+                          ("rev_unfinished", None, "revision"), ("grid1", "t", "revision_grid:x"),
+                          ("rev_scored", "t", "revision")]:
+        db.execute(f"INSERT INTO runs {cols} VALUES (?,?,?,?,?,?,?,?)",
+                   (rid, "E", 0, "h", "g", "s", end, tag))
+    db.execute("INSERT INTO metrics VALUES ('rev_scored','test','all','macro_f1',0.4)")
+    assert evaluate.runs_to_score(db, tag="revision", skip_scored=True) == ["rev1"]
+    assert "rev_unfinished" not in evaluate.runs_to_score(db)

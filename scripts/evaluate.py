@@ -8,8 +8,12 @@ never changes a setting and never touches the test days for any choice
 (CLAUDE.md leakage rule 3).
 
 Usage:  .venv/bin/python scripts/evaluate.py
+        .venv/bin/python scripts/evaluate.py --tag revision --skip-scored
+(the second form scores only the revision runs that have not been scored yet,
+so the original step-5 rows are never touched and each run is scored once)
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -23,10 +27,15 @@ from src import evaluate, harness  # noqa: E402
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default=None, help="score only runs with this tag")
+    ap.add_argument("--skip-scored", action="store_true",
+                    help="skip runs that already have test metrics")
+    args = ap.parse_args()
     cfg = yaml.safe_load(open(ROOT / "config.yaml"))
     df = pd.read_pickle(ROOT / cfg["data"]["processed_path"])
     db = harness.connect(ROOT / cfg["harness"]["runs_db"])
-    run_ids = evaluate.evaluate_all(df, cfg, db)
+    run_ids = evaluate.evaluate_all(df, cfg, db, tag=args.tag, skip_scored=args.skip_scored)
     db.close()
     print(f"\nScored {len(run_ids)} run(s) on the test days; metrics written to "
           f"{cfg['harness']['runs_db']}.")

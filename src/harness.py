@@ -46,7 +46,9 @@ def connect(path):
     with default 'main', so every original step-5 run is tagged 'main' and new
     revision runs can be told apart without touching the old rows.
     """
-    db = sqlite3.connect(str(path))
+    # timeout: several replays may write to the same runs.db in parallel; each
+    # commits per window, so a writer waits briefly for another's commit.
+    db = sqlite3.connect(str(path), timeout=600)
     db.executescript(SCHEMA)
     cols = [r[1] for r in db.execute("PRAGMA table_info(runs)")]
     if "tag" not in cols:
@@ -115,6 +117,7 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag=
                "start_time, end_time, tag) VALUES (?,?,?,?,?,?,?,?)",
                (run_id, policy_name, seed, config_hash("config.yaml"), git_commit(),
                 time.strftime("%Y-%m-%d %H:%M:%S"), None, tag))
+    db.commit()
 
     # Current (accepted) model starts as a freshly fit V1.
     current = models.make_v1(cfg).fit(Xtr, ytr)
@@ -164,6 +167,7 @@ def replay(df, cfg, policy_name, seed, db, max_windows=None, verbose=False, tag=
                         current_val, cand_val))
             if accepted:
                 current, current_val, version = cand, cand_val, version + 1
+            db.commit()   # short transactions, so parallel runs can share runs.db
             if verbose:
                 print(f"  window {k:4d}: pool {len(pool):4d} picked {len(picks):3d} "
                       f"val {current_val:.4f} cand {cand_val:.4f} "

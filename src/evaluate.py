@@ -104,12 +104,25 @@ def evaluate_run(df, cfg, db, run_id, threshold):
     return {r[2]: r[3] for r in rows if r[1] in ("all", "high_vol") and r[0] == "test"}
 
 
-def evaluate_all(df, cfg, db):
-    """Score every run in runs.db on the test days."""
+def runs_to_score(db, tag=None, skip_scored=False):
+    """run_ids to score: finished runs only (end_time set), optionally only one
+    tag, optionally only runs with no test metrics yet (score each run once)."""
+    q = "SELECT run_id FROM runs WHERE end_time IS NOT NULL"
+    params = []
+    if tag is not None:
+        q += " AND tag = ?"
+        params.append(tag)
+    if skip_scored:
+        q += " AND run_id NOT IN (SELECT run_id FROM metrics WHERE split = 'test')"
+    return pd.read_sql(q + " ORDER BY run_id", db, params=params).run_id.tolist()
+
+
+def evaluate_all(df, cfg, db, tag=None, skip_scored=False):
+    """Score finished runs in runs.db on the test days (see runs_to_score)."""
     threshold = cfg["volatility"]["threshold"]
     if threshold is None:
         raise ValueError("volatility.threshold is not frozen; run freeze_volatility.py")
-    run_ids = pd.read_sql("SELECT run_id FROM runs ORDER BY run_id", db).run_id.tolist()
+    run_ids = runs_to_score(db, tag=tag, skip_scored=skip_scored)
     for rid in run_ids:
         out = evaluate_run(df, cfg, db, rid, threshold)
         print(f"  {rid}: test macroF1 {out.get('macro_f1', float('nan')):.4f}")
