@@ -22,6 +22,8 @@ everywhere. C and D are deterministic; B and E use `rng`.
 
 import numpy as np
 
+from src import data
+
 EPS = 1e-12
 
 
@@ -106,7 +108,8 @@ def density_uncertainty_policy(pool, proba, B, rng, selected_so_far, cfg):
 # E: proposed (audit + uncertainty clustering); E-audit sets audit_share = 0
 # --------------------------------------------------------------------------- #
 
-def proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=None):
+def proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=None,
+                    cluster=True):
     """Policy E.
 
     Reserve an audit share of B for random samples drawn from confident
@@ -119,6 +122,9 @@ def proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=None)
     audit slots go to the cluster step; shortlist not larger than the cluster
     budget -> take the most uncertain directly; empty clusters -> fill with the
     next most uncertain. No repeated ids.
+
+    `cluster=False` (revision ablation) replaces the PCA/k-means step with plain
+    top-entropy: the non-audit slots go to the most uncertain remaining samples.
     """
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
@@ -152,6 +158,10 @@ def proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=None)
     # --- cluster step: most-uncertain shortlist, spread across k-means clusters ---
     remaining = np.array([i for i in range(n) if i not in chosen_idx])
     order = remaining[np.argsort(-H[remaining], kind="stable")]       # uncertain first
+    if not cluster:   # ablation: no diversity step, just the most uncertain
+        for i in order[:max(n_cluster, 0)]:
+            chosen.append((int(ids[i]), "top_entropy"))
+        return chosen[:B]
     short = order[: min(pcfg["shortlist_factor"] * n_cluster, len(order))]
 
     if n_cluster <= 0:
@@ -185,6 +195,43 @@ def proposed_no_audit_policy(pool, proba, B, rng, selected_so_far, cfg):
     return proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=0.0)
 
 
+# --------------------------------------------------------------------------- #
+# Post-hoc reviewer revision: drift-adaptive audit (E_drift) and ablations
+# --------------------------------------------------------------------------- #
+
+def drift_audit_share(pool, cfg):
+    """Audit share for this window: a_high if the label-free drift score
+    d_k > 1 (more volatile than the training upper quartile), else a_low."""
+    d = data.drift_score(pool, cfg)
+    rev = cfg["revision"]
+    return rev["audit_high"] if d > 1.0 else rev["audit_low"]
+
+
+def drift_adaptive_policy(pool, proba, B, rng, selected_so_far, cfg):
+    """Policy E_drift: E with an audit share that adapts to measured drift.
+
+    Same budget B as every other policy; only the split between audit and
+    cluster slots changes. Rationale: under drift, confident predictions are
+    more likely to be confidently wrong -- the error uncertainty sampling never
+    looks at -- so audit more of them; in calm windows spend more of B on
+    uncertain samples. The drift score uses no labels (src/data.py).
+    """
+    share = drift_audit_share(pool, cfg)
+    return proposed_policy(pool, proba, B, rng, selected_so_far, cfg, audit_share=share)
+
+
+def proposed_minus_cluster_policy(pool, proba, B, rng, selected_so_far, cfg):
+    """Ablation E-cluster: fixed 20% audit + plain top-entropy (no PCA/k-means)."""
+    return proposed_policy(pool, proba, B, rng, selected_so_far, cfg, cluster=False)
+
+
+def drift_adaptive_minus_cluster_policy(pool, proba, B, rng, selected_so_far, cfg):
+    """Ablation E_drift-cluster: drift-adaptive audit + plain top-entropy."""
+    share = drift_audit_share(pool, cfg)
+    return proposed_policy(pool, proba, B, rng, selected_so_far, cfg,
+                           audit_share=share, cluster=False)
+
+
 POLICIES = {
     "A": fixed_policy,
     "B": random_policy,
@@ -192,4 +239,8 @@ POLICIES = {
     "D": density_uncertainty_policy,
     "E": proposed_policy,
     "E_minus_audit": proposed_no_audit_policy,
+    # revision
+    "E_drift": drift_adaptive_policy,
+    "E_minus_cluster": proposed_minus_cluster_policy,
+    "E_drift_minus_cluster": drift_adaptive_minus_cluster_policy,
 }

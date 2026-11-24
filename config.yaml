@@ -72,3 +72,13 @@ volatility:
   vol_window: 100     # snapshots for the rolling std of mid-price change
   percentile: 75      # training-day window-volatility percentile used as threshold
   threshold: 0.000510  # frozen by scripts/freeze_volatility.py on days 1-5
+
+# Post-hoc reviewer revision (Nov 2026). Added AFTER the step-5 test results were seen.
+# Every value here is chosen on day-6 validation only and frozen before any test scoring.
+# Drift score d_k = mean snapshot volatility of window k's pool / volatility.threshold
+# (label-free, src/data.py). E_drift audits a_high of B when d_k > 1, else a_low.
+revision:
+  seeds: [0, 1, 2]        # R0: one E run took > 10 min, so 3 seeds for new variants
+  audit_grid: [[0.1, 0.4], [0.2, 0.4], [0.0, 0.4], [0.1, 0.6]]   # (a_low, a_high), seed 0
+  audit_low: null          # frozen from the R2 grid (final validation macro-F1)
+  audit_high: null
