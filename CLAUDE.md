@@ -9,6 +9,7 @@ Predict short-horizon mid-price direction (Up / Stationary / Down) from limit or
 - Base paper: Liu et al. 2023, *Online Active Learning for Drifting Data Streams*, IEEE TNNLS 34(1). It selects samples by uncertainty × local density.
 - Earlier work: Žliobaitė et al. 2014, *Active Learning With Drifting Streaming Data*, IEEE TNNLS 25(1).
 - Dataset: FI-2010, Ntakaris et al. 2018, *Journal of Forecasting*. CC BY 4.0.
+- Recent work (added after the faculty review; positions the work, changes no experiment): Wang et al. 2026, *NILE*, IJCAI-26 (random share + uncertainty under a fixed budget; cites Liu et al. 2023); Cacciarelli & Kulahci 2024 survey, *Machine Learning*; Jiao et al. 2025, *IEEE CIM*; Prata et al. 2024 LOB benchmark, *AI Review*. Details: `results/revision/related_work.md`.
 
 Labels in LOB data are free once the horizon passes. The scarce resource is **samples per update**, not human labelling. Never describe this as human annotation.
 

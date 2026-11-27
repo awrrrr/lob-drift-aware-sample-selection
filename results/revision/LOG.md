@@ -194,3 +194,10 @@ Attempt notes, kept because they changed the harness:
 5d. **Different sample budgets** → **not done, future work** (deadline; the failure analysis predicts selection matters only at larger budgets — this sweep would test it).
 5e. **Another independent dataset** → **not done, future work**: no comparable free, labelled LOB dataset is readily available (LOBSTER is paid).
 **Bottom line:** E_drift does not beat random (0.4149 vs 0.4151, CI −0.10 to +0.06 pp). Reported as a null result, settings never tuned on days 9-10. Dashboard shows the revision runs (`app/dashboard.py`); `DEMO.md` §5 has the talking points. Optional d_k-per-window dashboard panel not added (the dashboard reads `runs.db` only; d_k lives in `drift_windows.csv`).
+
+## Post-presentation — recent references (27 Nov 2026)
+
+Faculty comment after the presentation: the base paper (Liu et al. 2023) is not recent enough. Literature check only; no experiment, setting or result changed.
+- Closest recent work: Wang et al., *NILE*, IJCAI-26 (full text read). It splits a fixed labelling budget between random sampling (B/2, for coverage) and adaptive-threshold uncertainty sampling, plus minority-class sampling, and cites Liu et al. 2023 as a current hybrid strategy. Same random-plus-uncertainty recipe as policy E; E differs in per-window batch selection, an audit drawn only from confident predictions, and (E_drift) a drift-adaptive share.
+- Supporting: Cacciarelli & Kulahci 2024 survey (*Machine Learning*); Jiao et al. 2025 (*IEEE CIM*, from abstract + citing paper); Prata et al. 2024 LOB benchmark (*AI Review*, finds most deep LOB models overfit FI-2010).
+- `novelty.md` gains a NILE bullet (kept under 400 words, now 398); full entries and viva lines in `related_work.md`; DEMO.md §5 and CLAUDE.md reference it.

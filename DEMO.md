@@ -223,6 +223,14 @@ to catch drift goes back to Žliobaitė et al.; the cluster step is close to Zhd
 per-update budget, tested in a leakage-safe replay. Leakage rules → tests:
 `results/revision/leakage.md`.
 
+**Likely question: "Isn't a 2023 base paper outdated?"** (`results/revision/related_work.md`)
+> "The most recent related work I found is NILE, at IJCAI 2026. It still cites Liu et al.
+> 2023 as a current hybrid strategy, and it uses the same recipe as my policy E: a random
+> share of the budget for coverage plus uncertainty sampling. Mine selects a batch per
+> window, draws the random share only from confident predictions, and ties it to a drift
+> score." Also cite the 2024 *Machine Learning* survey (Cacciarelli & Kulahci) and, for
+> the order-book side, the 2024 LOBCAST benchmark (Prata et al.).
+
 **In the dashboard:** E_drift and the two −cluster ablations appear as "(revision)"
 policies, and the Results tab adds an "E_drift vs others" table. Grid and check runs
 are hidden.
